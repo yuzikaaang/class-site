@@ -12241,10 +12241,10 @@ console.log('\n【新】v3.9.8 首屏拆分 / 逐小时天气 / 一言分类 / �
   t('★v3.9.16 主脚本改为压缩版外链 + defer',
     /<script src="\.\/app\.min\.js\?v=\d+" defer><\/script>/.test(idx98)
     && fs.statSync(new URL('./app.js', import.meta.url)).size > 600000);
-  /* v4.16.4：作业看板设置面板、截止提醒样式加进来，基线抬到 505K 字符；
-     拆分前是 533KB，仍留了余量。 */
-  t('★v4.16.4 HTML 体积保持在 505K 字符以内（拆分前 533KB）',
-    idx98.length < 505000);
+  /* v4.16.4 基线 505K；v4.19.1 开屏班徽改为 96px PNG 内联 base64（约 30K 字符）
+     + 开屏 DOM/CSS/JS，HTML 涨到约 609K，故基线抬到 640K 并留余量。 */
+  t('★v4.16.4 HTML 体积保持在 640K 字符以内（v4.20 内联班徽后上调）',
+    idx98.length < 640000);
   t('★v3.9.8 版本号留在 HTML（门禁能直接读到）',
     RE_SITE.test(idx98) && !/var SITE_VERSION/.test(app98));
   t('★v3.9.8 首屏骨架卡（公告 + 板块）',
@@ -12989,7 +12989,7 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     const a = (idx711.match(/SITE_VERSION = '([\d.]+)'/) || [])[1] || '';
     const b = (fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8')
       .match(/SITE_VER = '([\d.]+)'/) || [])[1] || '';
-    t('★版本号已到 4.9.1 以上且 index / sw 一致', a === b && /^4\.(9|1\d)\./.test(a));
+    t('★版本号已到 4.9.1 以上且 index / sw 一致', a === b && /^4\.(9|[1-9]\d)\./.test(a));
   }
 
   /* ① 宝箱落点概率分布 */
@@ -14642,11 +14642,58 @@ console.log('\n【96】v4.6.0 抽取动画：盲盒（现抽·单次揭示）/ �
     /* ④ 版本记录与公告门禁 */
     t('★v4.19.0 版本记录齐全',
       /version: '4\.19\.0'/.test(adm3)
-      && /按科目批量录成绩/.test(adm3)
-      && ver.v === '4.19.0' && ver.items.length >= 4);
+      && /按科目批量录成绩/.test(adm3));
     t('★v4.19.0 公告条目均不超过 28 汉字且无禁词',
       (function(){
         const block = adm3.slice(adm3.indexOf("version: '4.19.0'"), adm3.indexOf("version: '4.18.11'"));
+        const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
+        const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
+        return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)
+          && texts.every(x => !ban.some(w => x.includes(w)));
+      })());
+  }
+
+  /* ===== v4.19.1：开屏动画 · 曲速菱形星空 · 实时进度 ===== */
+  {
+    const idx = readIdx();
+    const adm3 = fs.readFileSync(new URL('./admin-3.js', import.meta.url), 'utf8');
+    const ver = JSON.parse(fs.readFileSync(new URL('./version.json', import.meta.url), 'utf8'));
+    t('★v4.19.1 开屏 DOM 最先显示（body 顶部早于背景层）',
+      (function(){
+        const b = idx.indexOf('<body>');
+        const sp = idx.indexOf('id="clsSplash"', b);
+        const bg = idx.indexOf('id="bgLayer"', b);
+        return sp > b && bg > sp;
+      })());
+    t('★v4.19.1 开屏样式内联在 head，零外部依赖',
+      (function(){
+        const h = idx.indexOf('</head>');
+        return /#clsSplash\{position:fixed/.test(idx.slice(0,h))
+          && /clsp-cv/.test(idx) && /clsp-ring/.test(idx);
+      })());
+    t('★v4.19.1 班徽 base64 内联、Canvas 曲速菱形星本地渲染',
+      /clsp-badge/.test(idx) && /data:image\/png;base64,/.test(idx)
+      && /getContext\('2d'\)/.test(idx) && /function diamond\(/.test(idx)
+      && /clspCv/.test(idx));
+    t('★v4.19.1 圆环进度 stroke-dasharray 与实时百分比',
+      /stroke-dasharray:276\.46/.test(idx) && /id="clspFill"/.test(idx)
+      && /id="clspPct"/.test(idx) && /CIRC\*\(1-p\/100\)/.test(idx));
+    t('★v4.19.1 底部文案随进度实时切换',
+      /function footFor\(p\)/.test(idx) && /正在初始化界面/.test(idx)
+      && /正在加载班级资源/.test(idx) && /正在同步作业数据/.test(idx)
+      && /正在准备成绩与公告/.test(idx) && /正在校验登录状态/.test(idx)
+      && /foot\.textContent=footFor\(p\)/.test(idx));
+    t('★v4.19.1 进度真实信号+3秒硬上限+跳过+异常兜底',
+      /HARD_MS=3000/.test(idx) && /loaded && el>=MIN_MS/.test(idx)
+      && /sp\.addEventListener\('click',finish\)/.test(idx)
+      && /setTimeout\(finish,4600\)/.test(idx));
+    t('★v4.19.1 版本记录齐全',
+      /version: '4\.19\.1'/.test(adm3)
+      && /开屏动画/.test(adm3)
+      && ver.v === CUR_VER && ver.items.length >= 4);
+    t('★v4.19.1 公告条目均不超过 28 汉字且无禁词',
+      (function(){
+        const block = adm3.slice(adm3.indexOf("version: '4.19.1'"), adm3.indexOf("version: '4.19.0'"));
         const texts = [...block.matchAll(/text: '([^']*)'/g)].map(m => m[1]);
         const ban = ['不用','不再','现在','因为','所以','避免','后台','管理员','缓存'];
         return texts.length > 0 && texts.every(x => (x.match(/[\u4e00-\u9fa5]/g)||[]).length <= 28)
